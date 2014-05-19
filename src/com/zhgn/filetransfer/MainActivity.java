@@ -31,7 +31,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.milink.filetransfer.R;
 import com.zhgn.filetransfer.FileTransferManager.ConnectionListener;
 import com.zhgn.filetransfer.FileTransferManager.ReceiveFileListener;
 import com.zhgn.filetransfer.FileTransferManager.SendFileListener;
