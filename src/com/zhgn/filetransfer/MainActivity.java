@@ -65,6 +65,7 @@ public class MainActivity extends Activity implements PeerListListener, Connecti
     private final int GROUP_OWNER = 3;
     private final int GROUP_OWNER_ADDRESS = 4;
     private final int WIFIP2PDEVICE = 5;
+    private final int FILETRANSFER = 6;
 
     private final String mFileToTransfer = "/sdcard/documents/arp";
     private final String mFileToReceive = "/sdcard/Download/recv_arp";
@@ -93,6 +94,8 @@ public class MainActivity extends Activity implements PeerListListener, Connecti
             } else if (msg.what == GROUP_OWNER_ADDRESS) {
                 InetAddress address = (InetAddress) msg.obj;
                 textview2.setText("address: " + address.getHostAddress());
+            } else if (msg.what == FILETRANSFER) {
+                Toast.makeText(MainActivity.this, (String) msg.obj, Toast.LENGTH_SHORT).show();
             } else if (msg.what == WIFIP2PDEVICE) {
                 WifiP2pDevice device = (WifiP2pDevice) msg.obj;
 
@@ -314,14 +317,18 @@ public class MainActivity extends Activity implements PeerListListener, Connecti
                 ftm.sendFile(mFileToTransfer, new SendFileListener() {
                     @Override
                     public void onFileSendSuccess() {
-                        Toast.makeText(MainActivity.this, "send file successfully!",
-                                Toast.LENGTH_SHORT).show();
+                        Message msg = Message.obtain();
+                        msg.what = FILETRANSFER;
+                        msg.obj = "send file successfully!";
+                        mHandler.sendMessage(msg);
                     }
 
                     @Override
                     public void onFileSendFailure() {
-                        Toast.makeText(MainActivity.this, "send file failed!", Toast.LENGTH_SHORT)
-                                .show();
+                        Message msg = Message.obtain();
+                        msg.what = FILETRANSFER;
+                        msg.obj = "send file failed!";
+                        mHandler.sendMessage(msg);
                     }
                 });
             }
@@ -360,14 +367,18 @@ public class MainActivity extends Activity implements PeerListListener, Connecti
                 ftm.receiveFile(mFileToReceive, new ReceiveFileListener() {
                     @Override
                     public void onFileReceiveSuccess() {
-                        Toast.makeText(MainActivity.this, "receive file successfully!",
-                                Toast.LENGTH_SHORT).show();
+                        Message msg = Message.obtain();
+                        msg.what = FILETRANSFER;
+                        msg.obj = "receive file successfully!";
+                        mHandler.sendMessage(msg);
                     }
 
                     @Override
                     public void onFileReceiveFailure() {
-                        Toast.makeText(MainActivity.this, "receive file failed!",
-                                Toast.LENGTH_SHORT).show();
+                        Message msg = Message.obtain();
+                        msg.what = FILETRANSFER;
+                        msg.obj = "receive file failed!";
+                        mHandler.sendMessage(msg);
                     }
                 });
             }
