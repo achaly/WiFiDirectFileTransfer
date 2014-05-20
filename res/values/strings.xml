@@ -2,8 +2,10 @@
 <resources>
 
     <string name="app_name">FileTransfer</string>
-    <string name="action_discover">discover</string>
-    <string name="send">send</string>
-    <string name="receive">receive</string>
+    <string name="btnSendString">sendString</string>
+    <string name="btnReceiveString">receiveString</string>
+    <string name="btnDiscover">discover</string>
+    <string name="btnSendFile">sendFile</string>
+    <string name="btnReceiveFile">receiveFile</string>
 
 </resources>

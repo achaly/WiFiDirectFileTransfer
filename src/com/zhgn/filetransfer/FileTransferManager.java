@@ -14,7 +14,6 @@ import java.net.Socket;
 import java.net.SocketAddress;
 
 public class FileTransferManager implements Runnable {
-
     private final String TAG = FileTransferManager.class.getSimpleName();
 
     public enum Type {
@@ -22,19 +21,30 @@ public class FileTransferManager implements Runnable {
         SERVER,
     }
 
+    public enum Operation {
+        SEND_FILE,
+        RECEIVE_FILE,
+        SEND_STRING,
+        RECEIVE_STRING,
+    }
+
     private Type mType = null;
+    private Operation mOperation = null;
     private String mFilepath = null;
-    private boolean mSendFlag = false;
+    private String mString = null;
 
     private final int mBufferLength = 102400;
     private byte[] mBuffer = new byte[mBufferLength];
     private int mRead = 0;
 
+    private final int mTimeout = 10 * 1000; // 10 seconds.
     private Socket mSocket = null;
     private SocketAddress mSocketAddress = null;
     private ServerSocket mServerSocket = null;
 
     private ConnectionListener mConnectionListener = null;
+    private SendStringListener mSendStringListener = null;
+    private ReceiveStringListener mReceiveStringListener = null;
     private SendFileListener mSendFileListener = null;
     private ReceiveFileListener mReceiveFileListener = null;
 
@@ -58,40 +68,39 @@ public class FileTransferManager implements Runnable {
         mConnectionListener = listener;
     }
 
-    // file path to send or receive
-    public void setFilepath(String filepath) {
-        mFilepath = filepath;
+    public void sendString(String str, SendStringListener listener) {
+        mOperation = Operation.SEND_STRING;
+        mSendStringListener = listener;
+        mString = str;
+        new Thread(this).start();
     }
 
-    private void sendFile() {
-        mSendFlag = true;
+    public void receiveString(ReceiveStringListener listener) {
+        mOperation = Operation.RECEIVE_STRING;
+        mReceiveStringListener = listener;
         new Thread(this).start();
     }
 
     public void sendFile(String filepath, SendFileListener listener) {
+        mOperation = Operation.SEND_FILE;
         mSendFileListener = listener;
-        setFilepath(filepath);
-        sendFile();
-    }
-
-    private void receiveFile() {
-        mSendFlag = false;
+        mFilepath = filepath;
         new Thread(this).start();
     }
 
     public void receiveFile(String filepath, ReceiveFileListener listener) {
+        mOperation = Operation.RECEIVE_FILE;
         mReceiveFileListener = listener;
-        setFilepath(filepath);
-        receiveFile();
+        mFilepath = filepath;
+        new Thread(this).start();
     }
 
     private void connect() {
         if (mType == Type.SERVER) {
             try {
                 mServerSocket = new ServerSocket();
-                if (!mServerSocket.isBound()) {
-                    mServerSocket.bind(mSocketAddress);
-                }
+                mServerSocket.bind(mSocketAddress);
+                mServerSocket.setSoTimeout(mTimeout);
                 mSocket = mServerSocket.accept();
                 mConnectionListener.onConnectionSuccess();
 
@@ -106,9 +115,8 @@ public class FileTransferManager implements Runnable {
 
         } else {
             try {
-                // int timeout = 20 * 1000;
                 mSocket = new Socket();
-                mSocket.connect(mSocketAddress);
+                mSocket.connect(mSocketAddress, mTimeout);
                 mConnectionListener.onConnectionSuccess();
 
                 Log.d(TAG, "socket connect successful.");
@@ -141,71 +149,141 @@ public class FileTransferManager implements Runnable {
         }
     }
 
+    private void sendString() {
+        BufferedOutputStream bos = null;
+        try {
+            bos = new BufferedOutputStream(mSocket.getOutputStream());
+            bos.write((mString + "\n").getBytes());
+            bos.flush();
+
+            mSendStringListener.onStringSendSuccess(mString);
+
+        } catch (IOException e) {
+            mSendStringListener.onStringSendFailure(mString);
+
+            Log.e(TAG, "send string exception.");
+            e.printStackTrace();
+        } finally {
+            try {
+                if (bos != null) {
+                    bos.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void receiveString() {
+        BufferedInputStream bis = null;
+        StringBuilder sb = new StringBuilder();
+        try {
+            bis = new BufferedInputStream(mSocket.getInputStream());
+
+            while ((mRead = bis.read(mBuffer, 0, mBufferLength)) != -1) {
+                sb.append(new String(mBuffer, 0, mRead));
+            }
+
+            mReceiveStringListener.onStringReceiveSuccess(sb.toString());
+
+        } catch (IOException e) {
+            mReceiveStringListener.onStringReceiveFailure();
+
+            Log.e(TAG, "receive string exception.");
+            e.printStackTrace();
+        } finally {
+            try {
+                if (bis != null) {
+                    bis.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void sendFile() {
+        BufferedOutputStream bos = null;
+        FileInputStream fis = null;
+        try {
+            bos = new BufferedOutputStream(mSocket.getOutputStream());
+            fis = new FileInputStream(mFilepath);
+
+            while ((mRead = fis.read(mBuffer, 0, mBufferLength)) != -1) {
+                bos.write(mBuffer, 0, mRead);
+            }
+
+            mSendFileListener.onFileSendSuccess();
+
+        } catch (IOException e) {
+            mSendFileListener.onFileSendFailure();
+
+            Log.e(TAG, "send file exception.");
+            e.printStackTrace();
+        } finally {
+            try {
+                if (fis != null) {
+                    fis.close();
+                }
+                if (bos != null) {
+                    bos.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void receiveFile() {
+        BufferedInputStream bis = null;
+        FileOutputStream fos = null;
+        try {
+            bis = new BufferedInputStream(mSocket.getInputStream());
+            fos = new FileOutputStream(mFilepath);
+
+            while ((mRead = bis.read(mBuffer, 0, mBufferLength)) != -1) {
+                fos.write(mBuffer, 0, mRead);
+            }
+
+            mReceiveFileListener.onFileReceiveSuccess();
+
+        } catch (IOException e) {
+            mReceiveFileListener.onFileReceiveFailure();
+
+            Log.e(TAG, "receive file exception.");
+            e.printStackTrace();
+        } finally {
+            try {
+                if (fos != null) {
+                    fos.close();
+                }
+                if (bis != null) {
+                    bis.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     @Override
     public void run() {
         connect();
-        if (mSendFlag) {
-            BufferedOutputStream bos = null;
-            FileInputStream fis = null;
-            try {
-                bos = new BufferedOutputStream(mSocket.getOutputStream());
-                fis = new FileInputStream(mFilepath);
 
-                while ((mRead = fis.read(mBuffer, 0, mBufferLength)) != -1) {
-                    bos.write(mBuffer, 0, mRead);
-                }
-
-                mSendFileListener.onFileSendSuccess();
-
-            } catch (IOException e) {
-                mSendFileListener.onFileSendFailure();
-
-                Log.e(TAG, "send file exception.");
-                e.printStackTrace();
-            } finally {
-                try {
-                    if (fis != null) {
-                        fis.close();
-                    }
-                    if (bos != null) {
-                        bos.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-        } else {
-            BufferedInputStream bis = null;
-            FileOutputStream fos = null;
-            try {
-                bis = new BufferedInputStream(mSocket.getInputStream());
-                fos = new FileOutputStream(mFilepath);
-
-                while ((mRead = bis.read(mBuffer, 0, mBufferLength)) != -1) {
-                    fos.write(mBuffer, 0, mRead);
-                }
-
-                mReceiveFileListener.onFileReceiveSuccess();
-
-            } catch (IOException e) {
-                mReceiveFileListener.onFileReceiveFailure();
-
-                Log.e(TAG, "receive file exception.");
-                e.printStackTrace();
-            } finally {
-                try {
-                    if (fos != null) {
-                        fos.close();
-                    }
-                    if (bis != null) {
-                        bis.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
+        switch (mOperation) {
+            case SEND_STRING:
+                sendString();
+                break;
+            case RECEIVE_STRING:
+                receiveString();
+                break;
+            case SEND_FILE:
+                sendFile();
+                break;
+            case RECEIVE_FILE:
+                receiveFile();
+            default:
+                Log.e(TAG, "error operation!");
         }
 
         disconnect();
@@ -215,6 +293,18 @@ public class FileTransferManager implements Runnable {
         public void onConnectionSuccess();
 
         public void onConnectionFailure();
+    }
+
+    public static interface SendStringListener {
+        public void onStringSendSuccess(String str);
+
+        public void onStringSendFailure(String str);
+    }
+
+    public static interface ReceiveStringListener {
+        public void onStringReceiveSuccess(String str);
+
+        public void onStringReceiveFailure();
     }
 
     public static interface SendFileListener {
